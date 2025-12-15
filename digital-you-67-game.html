@@ -625,5 +625,40 @@
   }
 })();
 </script>
+// ==== DESKTOP + WIX IFRAME FIX ====
+
+// Allow mouse + focus inside Wix iframe
+canvas.style.touchAction = 'none';
+canvas.tabIndex = 0;
+
+// Force focus when clicking canvas
+canvas.addEventListener('pointerdown', () => {
+  canvas.focus();
+});
+
+// Resize canvas to fit Wix container
+function fitCanvas() {
+  const rect = wrap.getBoundingClientRect();
+
+  const cssW = Math.max(360, Math.floor(rect.width));
+  const cssH = Math.max(600, Math.floor(rect.height));
+
+  canvas.style.width = cssW + 'px';
+  canvas.style.height = cssH + 'px';
+
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  canvas.width = Math.floor(cssW * dpr);
+  canvas.height = Math.floor(cssH * dpr);
+
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  W = canvas.width;
+  H = canvas.height;
+}
+
+// Run on load + resize
+window.addEventListener('resize', fitCanvas);
+setTimeout(fitCanvas, 50);
+
 </body>
 </html>
