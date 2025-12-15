@@ -1,0 +1,629 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Digital You | Neon 67 Run</title>
+  <style>
+    :root { color-scheme: dark; }
+    html, body { height: 100%; margin: 0; }
+    body{
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background:#060611;
+      display:grid; place-items:center; overflow:hidden;
+    }
+    .wrap{
+      width:min(720px,96vw);
+      aspect-ratio:9/16;
+      border-radius:18px;
+      border:1px solid rgba(255,255,255,.12);
+      box-shadow:0 10px 40px rgba(0,0,0,.55);
+      position:relative;
+      overflow:hidden;
+      touch-action:none;
+      user-select:none;
+      background:
+        radial-gradient(1200px 800px at 50% 25%, rgba(0,255,210,.12) 0%, rgba(0,0,0,0) 55%),
+        radial-gradient(900px 700px at 55% 75%, rgba(255,0,170,.10) 0%, rgba(0,0,0,0) 55%),
+        radial-gradient(900px 700px at 25% 65%, rgba(0,160,255,.10) 0%, rgba(0,0,0,0) 60%),
+        linear-gradient(180deg, #070718, #04040d);
+    }
+    canvas{ width:100%; height:100%; display:block; }
+    .hud{
+      position:absolute;
+      inset:14px 14px auto 14px;
+      display:flex;
+      gap:10px;
+      justify-content:space-between;
+      align-items:center;
+      pointer-events:none;
+      flex-wrap:wrap;
+    }
+    .pill{
+      padding:8px 12px;
+      border-radius:999px;
+      background:rgba(0,0,0,.38);
+      border:1px solid rgba(255,255,255,.12);
+      backdrop-filter: blur(8px);
+      font-size:14px;
+      letter-spacing:.2px;
+      white-space:nowrap;
+      pointer-events:none;
+    }
+    .pill strong{ font-weight:800; }
+
+    /* clickable sound toggle */
+    .pill.btn {
+      pointer-events:auto;
+      cursor:pointer;
+      user-select:none;
+    }
+    .pill.btn:hover { background: rgba(255,255,255,.10); }
+
+    .center{
+      position:absolute; inset:0;
+      display:grid; place-items:center;
+      padding:18px;
+    }
+    .card{
+      width:min(540px,92%);
+      background:rgba(0,0,0,.50);
+      border:1px solid rgba(255,255,255,.14);
+      border-radius:18px;
+      padding:18px;
+      text-align:center;
+      backdrop-filter: blur(10px);
+    }
+    .title{
+      margin:0 0 6px;
+      font-size:22px;
+      letter-spacing:.4px;
+      text-shadow: 0 0 18px rgba(0,255,210,.35);
+    }
+    .sub{ margin:0 0 14px; opacity:.92; line-height:1.35; }
+    .btnRow{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+    button{
+      appearance:none;
+      border:1px solid rgba(255,255,255,.18);
+      background:rgba(255,255,255,.08);
+      color:white;
+      padding:10px 14px;
+      border-radius:12px;
+      font-weight:750;
+      cursor:pointer;
+    }
+    button:hover{ background:rgba(255,255,255,.12); }
+    .tiny{ font-size:12px; opacity:.82; margin-top:10px; }
+    .brand{
+      position:absolute; inset:auto 14px 14px 14px;
+      display:flex; justify-content:space-between; gap:10px;
+      opacity:.85; font-size:12px; pointer-events:none;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap" id="wrap">
+    <canvas id="c"></canvas>
+
+    <div class="hud">
+      <div class="pill">Tokens: <strong id="tokens">0</strong> / <strong id="goal">67</strong></div>
+      <div class="pill">Lives: <strong id="lives">3</strong></div>
+      <div class="pill btn" id="soundBtn">Sound: <strong id="soundState">On</strong></div>
+      <div class="pill">Best: <strong id="best">0</strong></div>
+    </div>
+
+    <div class="center" id="overlay">
+      <div class="card">
+        <h1 class="title">🎄 Neon 67 Run</h1>
+        <p class="sub">Drag to move. Collect <strong>67</strong> glowing tokens. Dodge the coal. Christmas neon vibes only. ✨</p>
+        <div class="btnRow">
+          <button id="startBtn">Start</button>
+          <button id="howBtn">How to Play</button>
+          <button id="resetBestBtn">Reset Best</button>
+        </div>
+        <div class="tiny" id="howText" style="display:none;">
+          Desktop: drag mouse. Mobile: drag/tap. Token = +1. Coal = -1 life. Hit 67 to win.
+        </div>
+      </div>
+    </div>
+
+    <div class="brand">
+      <div>Digital You</div>
+      <div>Collect “67”</div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  // ✅ Your product page link is set here
+  const WALLPAPER_URL = "https://www.digitalyou.ca/product-page/santa-with-67-christmas-phone-wallpaper";
+
+  const wrap = document.getElementById('wrap');
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d', { alpha: false });
+
+  const tokensEl = document.getElementById('tokens');
+  const livesEl  = document.getElementById('lives');
+  const goalEl   = document.getElementById('goal');
+  const bestEl   = document.getElementById('best');
+
+  const soundBtn = document.getElementById('soundBtn');
+  const soundStateEl = document.getElementById('soundState');
+
+  const overlay = document.getElementById('overlay');
+  const startBtn = document.getElementById('startBtn');
+  const howBtn = document.getElementById('howBtn');
+  const howText = document.getElementById('howText');
+  const resetBestBtn = document.getElementById('resetBestBtn');
+
+  const GOAL = 67;
+  const BEST_KEY = 'digitalyou_neon67_best';
+  const SOUND_KEY = 'digitalyou_neon67_sound';
+
+  let W, H, DPR;
+  function resize() {
+    const r = wrap.getBoundingClientRect();
+    DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    W = Math.floor(r.width * DPR);
+    H = Math.floor(r.height * DPR);
+    canvas.width = W;
+    canvas.height = H;
+  }
+  new ResizeObserver(resize).observe(wrap);
+  resize();
+
+  const S = {
+    running:false,
+    won:false,
+    t:0,
+    tokens:0,
+    lives:3,
+    best:Number(localStorage.getItem(BEST_KEY) || 0),
+    soundOn: (localStorage.getItem(SOUND_KEY) ?? "1") === "1",
+    speed:1,
+    spawnTimer:0,
+    particles:[],
+    drops:[],
+    catcher:{ x:0.5, y:0.88, w:0.20, h:0.040 }
+  };
+
+  goalEl.textContent = GOAL;
+  bestEl.textContent = S.best;
+  soundStateEl.textContent = S.soundOn ? "On" : "Off";
+
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  const rand=(a,b)=>a+Math.random()*(b-a);
+  const pxX=nx=>nx*W, pxY=ny=>ny*H;
+
+  function setHUD(){
+    tokensEl.textContent = S.tokens;
+    livesEl.textContent  = S.lives;
+    bestEl.textContent   = S.best;
+    soundStateEl.textContent = S.soundOn ? "On" : "Off";
+  }
+
+  function resetGame(){
+    S.running=false;
+    S.won=false;
+    S.t=0;
+    S.tokens=0;
+    S.lives=3;
+    S.speed=1;
+    S.spawnTimer=0;
+    S.particles.length=0;
+    S.drops.length=0;
+    S.catcher.x=0.5;
+    setHUD();
+  }
+
+  function startGame(){
+    resetGame();
+    S.running=true;
+    overlay.style.display='none';
+    if (S.soundOn) audioPrime();
+  }
+
+  // 🔊 WebAudio jingle (no external files)
+  let audioCtx = null;
+
+  function audioPrime(){
+    try{
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === "suspended") audioCtx.resume();
+    }catch(_){}
+  }
+
+  function playJingle(kind){
+    if (!S.soundOn) return;
+    audioPrime();
+    if (!audioCtx) return;
+
+    const t0 = audioCtx.currentTime;
+
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(0.18, t0 + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.18);
+    g.connect(audioCtx.destination);
+
+    if (kind === "token"){
+      const freqs = [880, 1174, 1760];
+      freqs.forEach((f, i) => {
+        const o = audioCtx.createOscillator();
+        o.type = "sine";
+        o.frequency.setValueAtTime(f, t0 + i*0.01);
+        const og = audioCtx.createGain();
+        og.gain.setValueAtTime(0.0001, t0);
+        og.gain.exponentialRampToValueAtTime(0.22, t0 + 0.01 + i*0.01);
+        og.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.14);
+        o.connect(og); og.connect(g);
+        o.start(t0);
+        o.stop(t0 + 0.20);
+      });
+    }
+
+    if (kind === "coal"){
+      const o = audioCtx.createOscillator();
+      o.type = "square";
+      o.frequency.setValueAtTime(120, t0);
+      o.frequency.exponentialRampToValueAtTime(70, t0 + 0.10);
+      const og = audioCtx.createGain();
+      og.gain.setValueAtTime(0.0001, t0);
+      og.gain.exponentialRampToValueAtTime(0.14, t0 + 0.01);
+      og.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.12);
+      o.connect(og); og.connect(g);
+      o.start(t0);
+      o.stop(t0 + 0.14);
+    }
+
+    if (kind === "win"){
+      const freqs = [660, 880, 990, 1320, 1760];
+      freqs.forEach((f, i) => {
+        const o = audioCtx.createOscillator();
+        o.type = "triangle";
+        o.frequency.setValueAtTime(f, t0 + i*0.03);
+        const og = audioCtx.createGain();
+        og.gain.setValueAtTime(0.0001, t0 + i*0.03);
+        og.gain.exponentialRampToValueAtTime(0.20, t0 + i*0.03 + 0.01);
+        og.gain.exponentialRampToValueAtTime(0.0001, t0 + i*0.03 + 0.20);
+        o.connect(og); og.connect(g);
+        o.start(t0 + i*0.03);
+        o.stop(t0 + i*0.03 + 0.24);
+      });
+    }
+  }
+
+  soundBtn.addEventListener('click', () => {
+    S.soundOn = !S.soundOn;
+    localStorage.setItem(SOUND_KEY, S.soundOn ? "1" : "0");
+    setHUD();
+    if (S.soundOn) playJingle("token");
+  });
+
+  function endGame(message){
+    S.running=false;
+    overlay.style.display='grid';
+
+    const title = overlay.querySelector('.title');
+    const sub   = overlay.querySelector('.sub');
+    title.textContent = message.title;
+    sub.innerHTML = message.sub;
+
+    if (S.tokens > S.best) {
+      S.best = S.tokens;
+      localStorage.setItem(BEST_KEY, String(S.best));
+    }
+    setHUD();
+  }
+
+  function winGame(){
+    S.won=true;
+    burst(S.catcher.x, S.catcher.y-0.05, 140, {kind:'win'});
+    playJingle("win");
+
+    endGame({
+      title: "🎁 You hit 67!",
+      sub: `Neon Christmas champion unlocked. Tokens: <strong>${S.tokens}</strong> / <strong>${GOAL}</strong>.<br><br>
+            <a href="${WALLPAPER_URL}" target="_blank" rel="noopener"
+               style="display:inline-block; margin-top:10px; padding:10px 14px; border-radius:12px;
+                      border:1px solid rgba(255,255,255,.18); background:rgba(255,255,255,.10); color:#fff;
+                      text-decoration:none; font-weight:800;">
+              Download the Santa 67 Wallpaper
+            </a>`
+    });
+  }
+
+  function spawnDrop(){
+    const coalChance = Math.min(0.22, 0.10 + S.t*0.00002);
+    const isCoal = Math.random() < coalChance;
+
+    S.drops.push({
+      x: Math.random(),
+      y: -0.10,
+      r: rand(0.020, 0.032),
+      vy: rand(0.16, 0.28) * (0.85 + S.speed),
+      coal: isCoal,
+      wobble: rand(0, Math.PI*2),
+      spin: rand(-3, 3)
+    });
+  }
+
+  function burst(nx, ny, count, opts={}) {
+    for (let i=0;i<count;i++){
+      S.particles.push({
+        x:nx, y:ny,
+        vx: rand(-0.30, 0.30),
+        vy: rand(-0.45, 0.08),
+        life: rand(0.35, 0.95),
+        t:0,
+        kind: opts.kind || 'token'
+      });
+    }
+  }
+
+  // Input
+  let pointerDown=false;
+  function setCatcher(clientX){
+    const r = wrap.getBoundingClientRect();
+    const nx = (clientX - r.left) / r.width;
+    S.catcher.x = clamp(nx, S.catcher.w/2, 1 - S.catcher.w/2);
+  }
+  wrap.addEventListener('pointerdown', (e)=>{
+    pointerDown=true;
+    wrap.setPointerCapture(e.pointerId);
+    setCatcher(e.clientX);
+  });
+  wrap.addEventListener('pointermove', (e)=>{
+    if(!pointerDown) return;
+    setCatcher(e.clientX);
+  });
+  wrap.addEventListener('pointerup', ()=> pointerDown=false);
+
+  // Buttons
+  startBtn.addEventListener('click', ()=>{
+    overlay.querySelector('.title').textContent = "🎄 Neon 67 Run";
+    overlay.querySelector('.sub').innerHTML =
+      `Drag to move. Collect <strong>67</strong> glowing tokens. Dodge the coal. Christmas neon vibes only. ✨`;
+    startGame();
+  });
+  howBtn.addEventListener('click', ()=>{
+    howText.style.display = howText.style.display==='none' ? 'block' : 'none';
+  });
+  resetBestBtn.addEventListener('click', ()=>{
+    localStorage.removeItem(BEST_KEY);
+    S.best = 0;
+    setHUD();
+  });
+
+  // Render helpers
+  function drawBackground(){
+    ctx.fillStyle = '#050511';
+    ctx.fillRect(0,0,W,H);
+
+    ctx.globalAlpha = 0.55;
+    for (let i=0;i<85;i++){
+      const x = (Math.sin(i*999 + S.t*0.001) * 0.5 + 0.5) * W;
+      const y = (Math.cos(i*777 + S.t*0.0012) * 0.5 + 0.5) * H;
+      const r = (i%3+1) * 0.7 * DPR;
+      ctx.fillStyle = i%2 ? 'rgba(0,255,210,.55)' : 'rgba(255,0,170,.40)';
+      ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    ctx.globalAlpha = 0.12;
+    ctx.strokeStyle = 'rgba(0,255,210,1)';
+    ctx.lineWidth = 1*DPR;
+    const step = Math.floor(44*DPR);
+    for (let y=0; y<H; y+=step){
+      ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function glowCircle(x,y,r, color, glow=2.4){
+    ctx.globalAlpha = 0.22;
+    ctx.fillStyle = color;
+    ctx.beginPath(); ctx.arc(x,y,r*glow,0,Math.PI*2); ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+  }
+
+  function drawCatcher(){
+    const c=S.catcher;
+    const x=pxX(c.x), y=pxY(c.y);
+    const w=pxX(c.w), h=pxY(c.h);
+
+    ctx.globalAlpha = 0.30;
+    ctx.fillStyle = 'rgba(0,255,210,1)';
+    ctx.beginPath();
+    ctx.roundRect(x-w/2-8*DPR, y-h/2-8*DPR, w+16*DPR, h+16*DPR, 14*DPR);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    ctx.fillStyle = 'rgba(255,255,255,.10)';
+    ctx.beginPath();
+    ctx.roundRect(x-w/2, y-h/2, w, h, 12*DPR);
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(0,255,210,.55)';
+    ctx.lineWidth = 2*DPR;
+    ctx.beginPath();
+    ctx.roundRect(x-w/2, y-h/2, w, h, 12*DPR);
+    ctx.stroke();
+
+    ctx.globalAlpha = 0.9;
+    ctx.strokeStyle = 'rgba(255,0,170,.55)';
+    ctx.lineWidth = 1.5*DPR;
+    ctx.beginPath();
+    ctx.moveTo(x-w/4, y+h/4);
+    ctx.lineTo(x+w/4, y+h/4);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  function drawToken(d){
+    const x=pxX(d.x), y=pxY(d.y), r=pxX(d.r);
+
+    ctx.save();
+    ctx.translate(x,y);
+    ctx.rotate(d.spin);
+    ctx.translate(-x,-y);
+
+    glowCircle(x,y,r,'rgba(0,255,210,.95)',2.8);
+
+    ctx.fillStyle = 'rgba(0,0,0,.70)';
+    ctx.font = `${Math.floor(r*1.25)}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
+    ctx.textAlign='center';
+    ctx.textBaseline='middle';
+    ctx.fillText('67', x, y+1*DPR);
+
+    ctx.globalAlpha = 0.18;
+    ctx.fillStyle = 'rgba(255,0,170,1)';
+    ctx.beginPath(); ctx.arc(x,y,r*2.1,0,Math.PI*2); ctx.fill();
+    ctx.globalAlpha = 1;
+
+    ctx.restore();
+  }
+
+  function drawCoal(d){
+    const x=pxX(d.x), y=pxY(d.y), r=pxX(d.r);
+
+    ctx.globalAlpha = 0.18;
+    ctx.fillStyle = 'rgba(255,70,70,1)';
+    ctx.beginPath(); ctx.arc(x,y,r*2.6,0,Math.PI*2); ctx.fill();
+    ctx.globalAlpha = 1;
+
+    ctx.fillStyle = 'rgba(30,30,35,1)';
+    ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,.14)';
+    ctx.lineWidth = 2*DPR;
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(255,90,90,.75)';
+    ctx.beginPath(); ctx.arc(x+r*0.25, y-r*0.25, r*0.12, 0, Math.PI*2); ctx.fill();
+  }
+
+  function drawParticles(dt){
+    for (let i=S.particles.length-1;i>=0;i--){
+      const p=S.particles[i];
+      p.t += dt;
+      const k = p.t / p.life;
+      if (k>=1){ S.particles.splice(i,1); continue; }
+
+      p.x += p.vx*dt;
+      p.y += p.vy*dt;
+      p.vy += 0.8*dt;
+
+      const x=pxX(p.x), y=pxY(p.y);
+      const rr=(2 + 7*(1-k))*DPR;
+
+      ctx.globalAlpha = 0.85*(1-k);
+      if (p.kind==='win'){
+        ctx.fillStyle = (Math.random()<0.5) ? 'rgba(0,255,210,1)' : 'rgba(255,0,170,1)';
+      } else if (p.kind==='coal'){
+        ctx.fillStyle = 'rgba(255,90,90,1)';
+      } else {
+        ctx.fillStyle = 'rgba(0,255,210,1)';
+      }
+      ctx.beginPath(); ctx.arc(x,y,rr,0,Math.PI*2); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // Loop
+  let last = performance.now();
+  function tick(now){
+    const dt = Math.min(0.033, (now-last)/1000);
+    last = now;
+
+    drawBackground();
+
+    if (S.running){
+      S.t += dt*1000;
+      S.speed = 1 + Math.min(2.8, S.t/24000);
+
+      S.spawnTimer -= dt;
+      const spawnEvery = Math.max(0.20, 0.55 - S.speed*0.12);
+      if (S.spawnTimer <= 0){
+        spawnDrop();
+        S.spawnTimer = spawnEvery;
+      }
+
+      const c=S.catcher;
+
+      for (let i=S.drops.length-1;i>=0;i--){
+        const d=S.drops[i];
+        d.wobble += dt*6;
+        d.y += d.vy*dt;
+        d.x += Math.sin(d.wobble)*dt*0.03;
+        d.spin += dt*(d.coal? 1.5 : 2.2);
+
+        const hit =
+          Math.abs(d.x - c.x) < (c.w/2 + d.r*0.85) &&
+          Math.abs(d.y - c.y) < (c.h/2 + d.r*0.95);
+
+        if (hit){
+          if (d.coal){
+            S.lives -= 1;
+            burst(d.x,d.y,20,{kind:'coal'});
+            playJingle("coal");
+          } else {
+            S.tokens += 1;
+            burst(d.x,d.y,16,{kind:'token'});
+            playJingle("token");
+          }
+          S.drops.splice(i,1);
+          setHUD();
+
+          if (S.lives <= 0){
+            endGame({
+              title: "🧨 Coal’d Out",
+              sub: `You grabbed <strong>${S.tokens}</strong> / <strong>${GOAL}</strong> tokens. Try again and hit 67.`
+            });
+          } else if (S.tokens >= GOAL){
+            winGame();
+          }
+          continue;
+        }
+
+        if (d.y > 1.15){
+          S.drops.splice(i,1);
+        }
+      }
+    }
+
+    for (const d of S.drops){
+      if (d.coal) drawCoal(d); else drawToken(d);
+    }
+    drawCatcher();
+    drawParticles(dt);
+
+    if (!S.running){
+      ctx.globalAlpha = 0.55;
+      ctx.fillStyle = 'rgba(0,0,0,.30)';
+      ctx.fillRect(0,0,W,H);
+      ctx.globalAlpha = 1;
+    }
+
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+
+  // roundRect polyfill
+  if (!CanvasRenderingContext2D.prototype.roundRect) {
+    CanvasRenderingContext2D.prototype.roundRect = function(x,y,w,h,r){
+      r = Math.min(r, w/2, h/2);
+      this.beginPath();
+      this.moveTo(x+r, y);
+      this.arcTo(x+w, y, x+w, y+h, r);
+      this.arcTo(x+w, y+h, x, y+h, r);
+      this.arcTo(x, y+h, x, y, r);
+      this.arcTo(x, y, x+w, y, r);
+      this.closePath();
+      return this;
+    }
+  }
+})();
+</script>
+</body>
+</html>
